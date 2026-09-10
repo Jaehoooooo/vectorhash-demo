@@ -38,10 +38,20 @@ def random_walk_velocities(n_steps: int, max_speed: int = 1, seed: int = 0) -> L
     return [choices[i] for i in idx]
 
 
+_sensory_data_cache = None
+
+
 def prepare_sensory_data():
     """사용자가 제공한 MiniImageNet 전처리 로직 기반 데이터 로더"""
+    # 입력이 고정 파일 하나뿐이라(랜덤성 없음) 결과가 항상 동일 -> 모듈 레벨로 캐싱.
+    # report.ipynb에서 데모 여러 개(2a/3a/4a/4b)가 각자 이 함수를 불러서 52MB짜리
+    # 배열을 매번 새로 만들면 Render 512MB 한도에서 누적으로 OOM남.
+    global _sensory_data_cache
+    if _sensory_data_cache is not None:
+        return _sensory_data_cache
+
     # print("\n=== MiniImageNet 데이터 로드 및 전처리 시작 ===")
-    
+
     # 파라미터 세팅
     Ns = 3600
     Npos = 60  
@@ -91,4 +101,5 @@ def prepare_sensory_data():
     print(f"값 범위: {np.min(sbook_flattened):.4f} ~ {np.max(sbook_flattened):.4f}")
     print("=== 데이터 전처리 완료 ===\n")
 
+    _sensory_data_cache = sbook_flattened
     return sbook_flattened
