@@ -393,7 +393,12 @@ def make_embedded_image_book_for_fig7(
                              "BW_miniimagenet_3600_60_60_full_rank.npy")
     img = np.load(npy_path)
     img_flat = img.reshape(3600, 3600).T
-    img_flat = img_flat - np.mean(img_flat)
+    # ponytail: float32로 낮춰서 메모리 절반 (Render 512MB 한도, 데모용이라 정밀도 손실 무해)
+    # cast를 먼저 해야 float64 원본(img)이 살아있는 동안 float64 중간 복사본까지
+    # 추가로 안 생김 (- 후 cast하면 float64 중간값이 잠깐 더 떠서 메모리 튐)
+    img_flat = img_flat.astype(np.float32)
+    del img
+    img_flat -= img_flat.mean()
 
     if shuffle_images:
         perm = rng.permutation(img_flat.shape[1])
@@ -401,20 +406,23 @@ def make_embedded_image_book_for_fig7(
 
     if use_tanh_inverse:
         smin, smax = np.amin(img_flat), np.amax(img_flat)
-        img_scaled = np.interp(img_flat, (smin, smax), (-0.95, 0.95))
-        img_embed = np.arctanh(img_scaled)
+        scale = 1.9 / (smax - smin)
+        shift = -0.95 - smin * scale
+        img_flat *= scale
+        img_flat += shift  # np.interp((smin,smax)->(-0.95,0.95))와 동일한 선형 변환, in-place
+        np.arctanh(img_flat, out=img_flat)
+        img_embed = img_flat
     else:
         img_embed = np.sign(img_flat)
         smin, smax = None, None
 
-    sbook_full = rng.standard_normal((Ns, Nstates))
-
-    k = 0
-    for x in range(block_x0, block_x0 + block_w):
-        for y in range(block_y0, block_y0 + block_h):
-            idx = x * Npos + y
-            sbook_full[:, idx] = img_embed[:, k]
-            k += 1
+    n_positions = block_w * block_h
+    # block이 (0,0)부터 시작해서 Nstates 전체를 정확히 덮는 경우(이 앱의 실제 사용
+    # 패턴) idx(=x*Npos+y)가 항상 k와 같은 순서로 증가 -> sbook_full은 img_embed의
+    # 앞 n_positions열과 완전히 동일. (예전엔 랜덤 배열 만들고 한 칸씩 덮어썼는데
+    # 전부 버려지는 값이라 낭비였음 + 계산도 전체 3600열에 대해 다 했음)
+    assert block_x0 == 0 and block_y0 == 0 and n_positions == Nstates and Npos == block_h
+    sbook_full = np.ascontiguousarray(img_embed[:, :n_positions])
 
     return sbook_full, smin, smax
 
