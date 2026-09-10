@@ -52,7 +52,7 @@ def prepare_sensory_data():
     block_w = 60
     block_h = 60
     
-    # 1. 이미지 로드 (cwd에 상관없이 이 폴더(vhs_refactor_cluade) 안의 파일만 사용)
+    # 1. 이미지 로드 (cwd에 상관없이 이 폴더(vhs_refactor) 안의 파일만 사용)
     file_path = os.path.join(os.path.dirname(os.path.abspath(__file__)),
                               'BW_miniimagenet_3600_60_60_full_rank.npy')
     if not os.path.exists(file_path):
@@ -60,37 +60,35 @@ def prepare_sensory_data():
         
     img = np.load(file_path)
     # print("원본 이미지 형태:", img.shape)
-    
+
     # 2. 평탄화 및 전치 (3600, 60, 60) -> (3600, 3600)
     img_flat = img.reshape((3600, 3600)).T
-    
-    # 3. Sensory book 초기화 및 이미지 블록 삽입
-    sbook_flattened = np.random.randn(Ns, n_states)
-    
-    k = 0
-    for x in range(block_x0, block_x0 + block_w):
-        for y in range(block_y0, block_y0 + block_h):
-            idx = x * Npos + y
-            sbook_flattened[:, idx] = img_flat[:, k]
-            k += 1
-            
-    # 4. 연상 기억을 위한 전처리 (스케일링 및 비선형 변환)
+
+    # 3. Sensory book 구성: block(60x60)이 n_states(3600) 전체를 정확히 덮어서
+    # idx(=x*Npos+y)가 항상 k와 같은 순서로 증가 -> 결과가 img_flat과 완전히 동일.
+    # (예전엔 random 배열을 만들고 한 칸씩 덮어썼는데 전부 버려지는 값이라 낭비였음)
+    # ponytail: float32로 낮춰서 메모리 절반 (512MB Render free tier 한도 때문에 필요, 정밀도 손실은 데모용이라 무해)
+    assert block_x0 == 0 and block_y0 == 0 and block_w == Npos and block_h == Npos
+    sbook_flattened = img_flat.astype(np.float32)
+    del img, img_flat
+
+    # 4. 연상 기억을 위한 전처리 (스케일링 및 비선형 변환) - 전부 in-place로 진행해서
+    # 중간 복사본이 동시에 여러 개 메모리에 떠있지 않게 함
     bw_mean = np.mean(sbook_flattened)
-    sbook_flattened = sbook_flattened - bw_mean
-    
+    sbook_flattened -= bw_mean
+
     sbookmin = np.amin(sbook_flattened)
     sbookmax = np.amax(sbook_flattened)
-    
-    sbook_scaled = np.interp(
-        sbook_flattened,
-        (sbookmin, sbookmax),
-        (-0.95, +0.95)
-    )
-    
-    sbookinv = np.arctanh(sbook_scaled)
-    
-    print(f"최종 sbook_flattened 형태: {sbookinv.shape}")
-    print(f"값 범위: {np.min(sbookinv):.4f} ~ {np.max(sbookinv):.4f}")
+
+    scale = 1.9 / (sbookmax - sbookmin)
+    shift = -0.95 - sbookmin * scale
+    sbook_flattened *= scale
+    sbook_flattened += shift  # np.interp((sbookmin,sbookmax)->(-0.95,0.95))와 동일한 선형 변환
+
+    np.arctanh(sbook_flattened, out=sbook_flattened)
+
+    print(f"최종 sbook_flattened 형태: {sbook_flattened.shape}")
+    print(f"값 범위: {np.min(sbook_flattened):.4f} ~ {np.max(sbook_flattened):.4f}")
     print("=== 데이터 전처리 완료 ===\n")
-    
-    return sbookinv
+
+    return sbook_flattened
