@@ -1,6 +1,8 @@
 voila
+ipykernel
 ipywidgets
 numpy
 scipy
 matplotlib
 pillow
+tqdm
