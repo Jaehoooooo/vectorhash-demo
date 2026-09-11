@@ -961,7 +961,7 @@ def plot_grid_modules_square(ax, grid_code, g, cmap="OrRd", vmin=0, vmax=1, shea
         x0 += w_x * (1 - overlap_ratio) if idx < n - 1 else w_x
 
     ax.set_xlim(min_x - margin, max_x + margin)
-    ax.set_ylim(0, max_h * 1.3)
+    ax.set_ylim(0, max_h + 0.04)
     ax.set_aspect("equal")
 
 
@@ -1019,7 +1019,13 @@ def _plot_novel_step_column(axes, col, t, model, novel_model):
 def _plot_novel_steps_grid(model, novel_model, selected, suptitle):
     n_rows = 4  # True sensory / Recall sensory / grid state(모듈 전체, 한 패널) / HPC state
     n_show = len(selected)
-    fig, axes = plt.subplots(n_rows, n_show, figsize=(3.2 * n_show, 3.2 * n_rows))
+    # grid state(row 2) 실제 내용은 sheared 마름모라 가로세로 비율이 ~3:1 (넓적함).
+    # 다른 행(정사각형 이미지)과 같은 높이를 주면 aspect="equal" 유지 시 위아래에
+    # 안 쓰이는 흰 여백이 크게 남는다 -- 그 행만 내용 비율(1/3)에 맞게 낮춰서
+    # 모양(마름모) 그대로 유지하면서 여백만 없앤다.
+    row_h_ratio = [1, 1, 1 / 3, 1]
+    fig, axes = plt.subplots(n_rows, n_show, gridspec_kw={"height_ratios": row_h_ratio},
+                              figsize=(3.2 * n_show, 3.2 * sum(row_h_ratio)))
     if n_show == 1:
         axes = axes.reshape(n_rows, 1)
 
@@ -1036,7 +1042,7 @@ def _plot_novel_steps_grid(model, novel_model, selected, suptitle):
     # tight_layout()은 axes마다 get_tightbbox(텍스트 렌더링)를 다 계산해야 해서
     # 열 수가 많아지면(4x4=16 axes) 느림(~0.5s/call). 고정 여백으로 대체해서
     # 슬라이더 인터랙션마다 다시 그릴 때 빠르게.
-    fig.subplots_adjust(left=0.06, right=0.98, top=0.90, bottom=0.03, hspace=0.35, wspace=0.25)
+    fig.subplots_adjust(left=0.06, right=0.98, top=0.96, bottom=0.02, hspace=0.08, wspace=0.25)
     plt.show()
     print(f"mean cos_sim = {np.mean(cos_list):.3f}  std = {np.std(cos_list):.3f}")
     return cos_list
